@@ -1,40 +1,79 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Task Manager</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-   <div id="auth-section">
-  <h2>Authentication</h2>
 
-  <input type="text" id="name" placeholder="Name">
+    <header class="topbar">
+        <div class="brand"><span class="brand-mark">&#10022;</span> Task Manager</div>
+        <div class="logout-button">
+            <button class="btn-soft" onclick="logout()">Logout</button>
+        </div>
+    </header>
 
-  <input type="email" id="email" placeholder="Email">
+    <!-- Shown when logged out -->
+    <main class="auth-wrap">
+        <div id="auth-section" class="card auth-card">
+            <h2>Welcome</h2>
+            <p class="muted">Log in, or create an account to get started.</p>
 
-  <input type="password" id="password" placeholder="Password">
+            <input type="text" id="name" placeholder="Name (only needed to register)">
+            <input type="email" id="email" placeholder="Email">
+            <input type="password" id="password" placeholder="Password">
 
-  <div class="auth-buttons">
-    <button id="registerBtn">Register</button>
-    <button id="loginBtn">Login</button>
-</div>
+            <div class="auth-buttons">
+                <button class="btn-primary" id="loginBtn">Login</button>
+                <button class="btn-soft" id="registerBtn">Register</button>
+            </div>
+        </div>
+    </main>
 
-<div class="logout-button">
-    <button onclick="logout()">Logout</button>
-</div>
-</div>
-    <h1>Task Manager</h1>
+    <!-- Shown when logged in: everything fits on one screen -->
+    <main class="app">
 
-    <input type="text" id="title" placeholder="Task Title">
+        <section class="card panel add-panel">
+            <h2>New Task</h2>
+            <input type="text" id="title" placeholder="Task title">
+            <input type="text" id="description" placeholder="Description">
+            <button class="btn-primary full" id="addBtn" onclick="addTask()">Add Task</button>
+        </section>
 
-    <input type="text" id="description" placeholder="Description">
+        <section class="card panel tasks-panel">
+            <h2>Your Tasks</h2>
+            <div id="tasks"></div>
+        </section>
 
-    
-    <button id="addBtn" onclick="addTask()">Add Task</button>
+        <section id="ai-section" class="card panel ai-panel">
+            <h2>&#10024; AI Assistant</h2>
+            <div class="panel-body">
+                <label class="field-label" for="aiGoal">Turn a goal into tasks</label>
+                <input type="text" id="aiGoal" placeholder="e.g. Plan my product launch">
+                <button class="ai-btn full" id="aiGenerateBtn">Generate Tasks</button>
 
-    <div id="tasks"></div>
+                <div id="ai-suggestions"></div>
+
+                <hr>
+
+                <label class="field-label" for="aiQuestion">Ask about your tasks</label>
+                <input type="text" id="aiQuestion" placeholder="e.g. What is still pending?">
+                <div class="row">
+                    <button class="ai-btn" id="aiAskBtn">Ask</button>
+                    <button class="btn-soft" id="aiSummaryBtn">Summarize My Tasks</button>
+                </div>
+
+                <div id="aiOutput"></div>
+            </div>
+        </section>
+
+    </main>
 
     <script src="script.js"></script>
-    
 </body>
 </html>

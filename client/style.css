@@ -1,77 +1,303 @@
-body{
-    font-family: Arial, sans-serif;
-    background: #f4f6f9;
-    margin: 0;
-    padding: 30px;
+/* ---------- Palette: Creme, Sand, Dusty Pink, Burgundy ---------- */
+:root{
+    /* your four colors */
+    --creme:    #EEE4DA;
+    --sand:     #D8C4AC;
+    --pink:     #C8A49F;
+    --burgundy: #4D0E13;
+
+    /* surfaces */
+    --bg:    var(--creme);       /* page */
+    --card:  #F8F3ED;            /* panels: a lighter tint of Creme */
+    --inner: var(--creme);       /* inputs, task cards */
+    --line:  #E0D1C0;
+
+    /* text */
+    --text:  var(--burgundy);
+    --muted: #7a5459;
+
+    /* deeper tones for borders and the Delete label */
+    --sand-line: #C9B08F;
+    --pink-line: #B58B85;
+    --pink-tint: #F0DFDC;
+    --delete-text: #8a2b33;
+
+    --shadow: 0 6px 18px rgba(77, 14, 19, 0.08);
 }
 
-h1{
-    text-align: center;
-    color: #333;
-    margin-bottom: 30px;
+*{ box-sizing: border-box; }
+
+html, body{ height: 100%; }
+
+body{
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;               /* the whole app fits one screen */
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Nunito", "Segoe UI", Arial, sans-serif;
+}
+
+h2{
+    margin: 0 0 14px;
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--text);
+}
+
+.muted{ color: var(--muted); margin: -6px 0 14px; font-size: 14px; }
+
+/* ---------- Top bar ---------- */
+.topbar{
+    flex: 0 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 28px;
+    background: var(--card);
+    border-bottom: 1px solid var(--line);
+}
+
+.brand{
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: 0.3px;
+}
+
+.brand-mark{ color: var(--pink); margin-right: 4px; }
+
+.logout-button{ display: none; }
+body.logged-in .logout-button{ display: block; }
+
+/* ---------- Cards & inputs ---------- */
+.card{
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 20px;
+    box-shadow: var(--shadow);
 }
 
 input{
     display: block;
     width: 100%;
-    max-width: 500px;
-    margin: 10px auto;
-    padding: 12px;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    box-sizing: border-box;
-}
-
-button{
-    padding: 10px 15px;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    margin: 5px;
-}
-
-button:hover{
-    opacity: 0.9;
-}
-
-.task{
-    background: white;
-    max-width: 550px;
-    margin: 15px auto;
-    padding: 15px;
+    margin: 0 0 10px;
+    padding: 11px 13px;
+    font: inherit;
+    color: var(--text);
+    background: var(--inner);
+    border: 1px solid var(--line);
     border-radius: 10px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    outline: none;
+    transition: border-color .15s, box-shadow .15s;
+}
+
+input::placeholder{ color: #a88f8b; }
+
+input:focus{
+    border-color: var(--pink);
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(200, 164, 159, 0.35);
+}
+
+.field-label{
+    display: block;
+    margin-bottom: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--muted);
+}
+
+hr{
+    border: none;
+    border-top: 1px solid var(--line);
+    margin: 18px 0;
+}
+
+/* ---------- Buttons ---------- */
+button{
+    font: inherit;
+    font-weight: 700;
+    font-size: 14px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 9px 14px;
+    cursor: pointer;
+    color: var(--text);
+    background: var(--sand);
+    transition: transform .1s, filter .15s;
+}
+
+button:hover:not(:disabled){ filter: brightness(0.97); transform: translateY(-1px); }
+button:disabled{ opacity: .6; cursor: wait; }
+
+.btn-primary{ background: var(--burgundy); border-color: var(--burgundy); color: var(--creme); }
+.btn-primary:hover:not(:disabled){ filter: brightness(1.3); }
+.btn-soft{ background: var(--sand); border-color: var(--sand-line); color: var(--text); }
+.ai-btn{ background: var(--pink); border-color: var(--pink-line); color: var(--burgundy); }
+.full{ width: 100%; }
+
+.row{ display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ---------- Logged-out view ---------- */
+.auth-wrap{
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+body.logged-in .auth-wrap{ display: none; }
+
+.auth-card{ width: 100%; max-width: 400px; padding: 28px; }
+.auth-card h2{ font-size: 24px; }
+
+.auth-buttons{ display: flex; gap: 10px; margin-top: 4px; }
+.auth-buttons button{ flex: 1; padding: 11px; }
+
+/* ---------- Logged-in layout: three columns, one screen ---------- */
+.app{
+    flex: 1;
+    min-height: 0;
+    display: none;
+    grid-template-columns: 290px minmax(0, 1fr) 360px;
+    gap: 20px;
+    padding: 20px 28px 24px;
+}
+
+body.logged-in .app{ display: grid; }
+
+.panel{
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.add-panel{ align-self: start; }
+
+/* the only things that scroll are inside their own panels */
+#tasks, .panel-body{
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+#tasks::-webkit-scrollbar, .panel-body::-webkit-scrollbar{ width: 8px; }
+#tasks::-webkit-scrollbar-thumb, .panel-body::-webkit-scrollbar-thumb{
+    background: var(--sand);
+    border-radius: 8px;
+}
+
+/* ---------- Tasks ---------- */
+.task{
+    background: var(--inner);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+}
+
+.task-top{
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
 }
 
 .task h3{
-    margin-top: 0;
-    color: #222;
+    margin: 0;
+    font-size: 16px;
+    font-weight: 800;
+    word-break: break-word;
 }
 
 .task p{
-    color: #555;
-    margin: 8px 0;
+    margin: 6px 0 0;
+    font-size: 14px;
+    color: var(--muted);
+    word-break: break-word;
 }
 
-#tasks{
-    margin-top: 25px;
-}
-#addBtn{
-    display: block;
-    margin: 15px auto;
+.task.done h3{ text-decoration: line-through; color: var(--muted); }
+
+.badge{
+    flex: 0 0 auto;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 800;
+    border: 1px solid transparent;
 }
 
-.auth-buttons{
+.badge-pending{ background: var(--sand); border-color: var(--sand-line); color: var(--burgundy); }
+.badge-done{ background: var(--burgundy); border-color: var(--burgundy); color: var(--creme); }
+
+.task-actions{
     display: flex;
-    justify-content: center;
-    gap: 10px;
-    margin-top: 10px;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 12px;
 }
 
-.logout-button{
+.task-actions button{ padding: 6px 11px; font-size: 13px; }
+.task-actions .btn-soft{ background: var(--card); }
+.btn-complete{ background: var(--card); border-color: var(--burgundy); color: var(--burgundy); }
+.btn-delete{ background: var(--card); border-color: var(--pink-line); color: var(--delete-text); }
+
+.empty{
     text-align: center;
-    margin-top: 10px;
+    color: var(--muted);
+    padding: 40px 10px;
 }
-#auth-section h2{
-    text-align: center;
+
+/* ---------- AI suggestions & output ---------- */
+#ai-suggestions{ margin-top: 12px; }
+
+.suggestions-box{
+    background: var(--inner);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px 14px;
+}
+
+.suggestions-box h4{ margin: 0 0 8px; font-size: 14px; }
+
+.suggestion{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-top: 1px solid var(--line);
+    font-size: 14px;
+}
+
+.suggestion p{ margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+.suggestion button{ padding: 5px 12px; flex: 0 0 auto; background: var(--sand); border-color: var(--sand-line); color: var(--burgundy); }
+
+.suggestions-actions{ display: flex; gap: 8px; margin-top: 10px; }
+.suggestions-actions button:not(.ai-btn){ background: var(--card); }
+
+#aiOutput{
+    display: none;
+    margin-top: 12px;
+    padding: 12px 14px;
+    background: var(--pink-tint);
+    border: 1px solid var(--pink-line);
+    border-radius: 12px;
+    white-space: pre-wrap;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+/* ---------- Small screens: stack and allow normal scrolling ---------- */
+@media (max-width: 900px){
+    body{ height: auto; min-height: 100vh; overflow: auto; }
+    .app{ grid-template-columns: 1fr; padding: 16px; }
+    .topbar{ padding: 12px 16px; }
+    #tasks, .panel-body{ overflow: visible; }
 }
