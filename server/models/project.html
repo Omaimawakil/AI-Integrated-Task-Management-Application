@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<!--
+  SMART ROUTE PLANNER WITH TRAFFIC ANALYSIS
+  Everything is in this ONE file (HTML + CSS + JavaScript). No backend or install needed.
+  Save it as index.html and double-click to open it (internet required).
+  If your browser blocks requests when opened by double-click, run this in the folder:
+      python -m http.server 8000
+  and open http://localhost:8000
+
+  Data sources (all free, called directly from the browser):
+   - Map tiles ........ OpenStreetMap + Leaflet.js
+   - Place search ..... Nominatim (OpenStreetMap geocoder)
+   - Road network ..... Overpass API (OpenStreetMap roads)
+  Traffic is SIMULATED (random but repeatable). It is NOT real-time traffic data.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smart Route Planner</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Arial, sans-serif; background: #f3f4f6; color: #222; }
+  header { background: #1e3a8a; color: #fff; padding: 12px 20px; height: 60px; }
+  header h1 { margin: 0; font-size: 20px; }
+  header p { margin: 2px 0 0; font-size: 12px; opacity: .85; }
+  .layout { display: flex; height: calc(100vh - 60px); }
+  .sidebar { width: 380px; padding: 14px; overflow-y: auto; background: #fff; border-right: 1px solid #ddd; }
+  #map { flex: 1; }
+  label.t { font-size: 13px; font-weight: bold; display: block; margin-top: 10px; }
+  input[type=text], select { width: 100%; padding: 8px; margin-top: 4px; border: 1px solid #bbb; border-radius: 6px; font-size: 14px; }
+  button { padding: 9px 12px; border: 0; border-radius: 6px; background: #2563eb; color: #fff; font-size: 14px; cursor: pointer; margin-top: 12px; }
+  button:hover { background: #1d4ed8; }
+  button:disabled { background: #9ca3af; cursor: not-allowed; }
+  button.secondary { background: #6b7280; }
+  button.secondary:hover { background: #4b5563; }
+  .row { display: flex; gap: 8px; }
+  #status { margin-top: 10px; font-size: 13px; color: #555; min-height: 18px; }
+  #status.error { color: #b91c1c; font-weight: bold; }
+  .card { border: 1px solid #ddd; border-radius: 8px; padding: 10px; margin-top: 12px; font-size: 13px; }
+  .card h3 { margin: 0 0 6px; font-size: 15px; }
+  .card.shortest { border-left: 6px solid #2563eb; }
+  .card.fastest { border-left: 6px solid #9333ea; }
+  .card table { width: 100%; border-collapse: collapse; }
+  .card td { padding: 2px 0; }
+  .card td:last-child { text-align: right; font-weight: bold; }
+  .bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; margin: 6px 0 2px; background: #eee; }
+  .small { font-size: 11px; color: #666; }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; color: #fff; font-size: 12px; }
+  .compare { background: #fefce8; border: 1px solid #fde68a; border-radius: 8px; padding: 10px; margin-top: 12px; font-size: 13px; line-height: 1.45; }
+  .legend { margin-top: 10px; font-size: 12px; }
+  .legend span.box { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin: 0 4px 0 10px; vertical-align: middle; }
+  #history div { padding: 6px 8px; border: 1px solid #e5e7eb; border-radius: 6px; margin-top: 6px; font-size: 12px; cursor: pointer; }
+  #history div:hover { background: #eff6ff; }
+  .note { font-size: 11px; color: #777; margin-top: 12px; line-height: 1.4; }
+  details { margin-top: 14px; font-size: 12px; line-height: 1.5; }
+  summary { cursor: pointer; font-weight: bold; }
+  .chk { font-size: 12px; margin-top: 10px; display: block; }
+  @media (max-width: 800px) {
+    .layout { flex-direction: column-reverse; height: auto; }
+    .sidebar { width: 100%; }
+    #map { height: 60vh; flex: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Smart Route Planner with Traffic Analysis</h1>
+  <p>Leaflet + OpenStreetMap + Dijkstra's Algorithm (traffic is simulated, not real-time)</p>
+</header>
+
+<div class="layout">
+  <div class="sidebar">
+    <label class="t" for="from">Starting point</label>
+    <input type="text" id="from" placeholder="e.g. Connaught Place, New Delhi">
+    <label class="t" for="to">Destination</label>
+    <input type="text" id="to" placeholder="e.g. India Gate, New Delhi">
+    <div class="small" style="margin-top:4px;">You can also type coordinates like <b>28.63,77.22</b></div>
+
+    <label class="t" for="scenario">Traffic scenario (simulated)</label>
+    <select id="scenario">
+      <option value="light">Light traffic (late night)</option>
+      <option value="normal" selected>Normal traffic</option>
+      <option value="rush">Rush hour</option>
+    </select>
+
+    <label class="chk"><input type="checkbox" id="showAll"> Show simulated traffic on all roads</label>
+
+    <div class="row">
+      <button id="goBtn">Find Routes</button>
+      <button id="reBtn" class="secondary" disabled>Re-simulate Traffic</button>
+    </div>
+    <div id="status"></div>
+
+    <div id="results"></div>
+
+    <div class="legend">
+      <b>Traffic:</b>
+      <span class="box" style="background:#22c55e"></span>Low
+      <span class="box" style="background:#f59e0b"></span>Moderate
+      <span class="box" style="background:#ef4444"></span>Heavy
+    </div>
+    <div class="legend">
+      <b>Route outline:</b>
+      <span class="box" style="background:#2563eb"></span>Shortest
+      <span class="box" style="background:#9333ea"></span>Fastest
+    </div>
+
+    <h3 style="margin-bottom:0;font-size:15px;margin-top:18px;">Recent searches</h3>
+    <div id="history"></div>
+    <button id="clearBtn" class="secondary" style="font-size:12px;padding:5px 10px;">Clear history</button>
+
+    <details>
+      <summary>How it works (for presentation)</summary>
+      <ol>
+        <li>Place names are converted to coordinates (geocoding).</li>
+        <li>Roads in that area are downloaded from OpenStreetMap.</li>
+        <li>A <b>weighted graph</b> is built: intersections = nodes, road pieces = edges.</li>
+        <li>Each road gets a <b>simulated</b> traffic level: low (x1.0 speed), moderate (x0.6), heavy (x0.3).</li>
+        <li><b>Dijkstra #1</b> uses distance as the weight, which gives the shortest route.</li>
+        <li><b>Dijkstra #2</b> uses travel time (distance / traffic-adjusted speed) as the weight, which gives the fastest route.</li>
+        <li>Both routes are compared on distance, time and traffic mix.</li>
+      </ol>
+    </details>
+
+    <p class="note">
+      Traffic levels are randomly simulated per road, so results are for demonstration only.
+      Roads are treated as two-way, and one-way restrictions are ignored.
+      Keep the two places within about 8 km of each other, because larger areas make the
+      road download slow.
+    </p>
+  </div>
+  <div id="map"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* =====================================================
+   1. SETTINGS
+   ===================================================== */
+const TRAFFIC = {
+  low:      { color: '#22c55e', label: 'Low',      speedFactor: 1.0 },
+  moderate: { color: '#f59e0b', label: 'Moderate', speedFactor: 0.6 },
+  heavy:    { color: '#ef4444', label: 'Heavy',    speedFactor: 0.3 }
+};
+
+// Free-flow speed (km/h) by road type
+const SPEED = {
+  motorway: 80, trunk: 70, primary: 50, secondary: 45, tertiary: 40,
+  unclassified: 35, residential: 30, living_street: 15
+};
+
+// Probability cutoffs for each scenario: r < a -> low, r < b -> moderate, else heavy
+const SCENARIOS = { light: [0.80, 0.95], normal: [0.50, 0.80], rush: [0.25, 0.55] };
+
+const SHORT_COLOR = '#2563eb';
+const FAST_COLOR  = '#9333ea';
+const MAX_DISTANCE_KM = 8;
+const OVERPASS_URLS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter'
+];
+const HISTORY_KEY = 'routePlannerHistory';
+
+/* =====================================================
+   2. MAP SETUP
+   ===================================================== */
+const map = L.map('map', { preferCanvas: true }).setView([20.5937, 78.9629], 5);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap contributors', maxZoom: 19
+}).addTo(map);
+
+const trafficLayer = L.layerGroup().addTo(map); // optional all-roads overlay (drawn first = underneath)
+const routeLayer   = L.layerGroup().addTo(map); // the two routes + markers (drawn on top)
+
+// Global state
+let graph = null;        // Map: nodeId -> { lat, lon, edges: [] }
+let roads = [];          // list of road objects (each shared by its two directions)
+let startNode = null, endNode = null;
+let startPoint = null, endPoint = null;
+let current = null;      // { shortest: [edges], fastest: [edges] }
+let trafficSeed = 1;
+
+const $ = id => document.getElementById(id);
+function setStatus(text, isError) {
+  $('status').textContent = text;
+  $('status').className = isError ? 'error' : '';
+}
+const pause = () => new Promise(r => setTimeout(r, 30)); // lets the browser repaint
+
+/* =====================================================
+   3. HELPER FUNCTIONS
+   ===================================================== */
+// Distance between two [lat, lon] points in km (Haversine formula)
+function haversine(a, b) {
+  const R = 6371, rad = Math.PI / 180;
+  const dLat = (b[0] - a[0]) * rad, dLon = (b[1] - a[1]) * rad;
+  const h = Math.sin(dLat / 2) ** 2 +
+            Math.cos(a[0] * rad) * Math.cos(b[0] * rad) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+// Small seeded random generator: same seed gives the same sequence
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function fmtTime(hours) {
+  const mins = hours * 60;
+  if (mins < 60) return mins.toFixed(1) + ' min';
+  return Math.floor(mins / 60) + ' h ' + Math.round(mins % 60) + ' min';
+}
+const fmtDist = km => km.toFixed(2) + ' km';
+
+// Turn place name (or "lat,lon") into coordinates
+async function geocode(text) {
+  const m = text.match(/^\s*(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)\s*$/);
+  if (m) return { lat: parseFloat(m[1]), lon: parseFloat(m[3]), name: text };
+
+  const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=en&q=' +
+              encodeURIComponent(text);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Place search failed. Try again in a moment.');
+  const data = await res.json();
+  if (!data.length) throw new Error('Could not find "' + text + '". Try adding the city name.');
+  return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon), name: data[0].display_name };
+}
+
+/* =====================================================
+   4. DOWNLOAD ROADS FROM OPENSTREETMAP (Overpass API)
+   ===================================================== */
+async function fetchRoads(a, b) {
+  const spanLat = Math.abs(a.lat - b.lat), spanLon = Math.abs(a.lon - b.lon);
+  const padLat = 0.008 + spanLat * 0.1, padLon = 0.008 + spanLon * 0.1;
+  const s = Math.min(a.lat, b.lat) - padLat, n = Math.max(a.lat, b.lat) + padLat;
+  const w = Math.min(a.lon, b.lon) - padLon, e = Math.max(a.lon, b.lon) + padLon;
+
+  const query = '[out:json][timeout:40];' +
+    'way["highway"~"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street)(_link)?$"]' +
+    `(${s},${w},${n},${e});out geom;`;
+
+  let lastError = null;
+  for (const url of OVERPASS_URLS) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        body: 'data=' + encodeURIComponent(query),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      });
+      if (!res.ok) throw new Error('Server busy (' + res.status + ')');
+      const data = await res.json();
+      if (!data.elements || !data.elements.length) throw new Error('No roads found in this area.');
+      return data.elements;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw new Error('Could not download road data: ' + (lastError ? lastError.message : 'unknown error'));
+}
+
+/* =====================================================
+   5. BUILD THE WEIGHTED GRAPH
+      Nodes = intersections (and road ends)
+      Edges = road pieces between two intersections (weight = distance)
+   ===================================================== */
+function buildGraph(elements) {
+  const ways = elements.filter(el => el.type === 'way' && el.nodes && el.geometry &&
+                                     el.nodes.length === el.geometry.length &&
+                                     el.geometry.every(g => g));
+
+  // Step 1: count how many times each OSM node is used. Used more than once = intersection.
+  const useCount = new Map();
+  for (const way of ways) {
+    for (const id of way.nodes) useCount.set(id, (useCount.get(id) || 0) + 1);
+  }
+
+  const g = new Map();
+  roads = [];
+  let edgeId = 0;
+
+  const getNode = (id, pt) => {
+    if (!g.has(id)) g.set(id, { lat: pt.lat, lon: pt.lon, edges: [] });
+    return g.get(id);
+  };
+
+  // Step 2: walk along each way and cut it at intersections
+  for (const way of ways) {
+    const type = (way.tags && way.tags.highway ? way.tags.highway : 'residential').replace('_link', '');
+    const speed = SPEED[type] || 30;
+    let segStart = 0;
+    let geom = [[way.geometry[0].lat, way.geometry[0].lon]];
+    let dist = 0;
+
+    for (let i = 1; i < way.nodes.length; i++) {
+      const p = [way.geometry[i].lat, way.geometry[i].lon];
+      dist += haversine(geom[geom.length - 1], p);
+      geom.push(p);
+
+      const isEnd = i === way.nodes.length - 1;
+      if (useCount.get(way.nodes[i]) > 1 || isEnd) {
+        const fromId = way.nodes[segStart], toId = way.nodes[i];
+        if (fromId !== toId && dist > 0) {
+          const fromNode = getNode(fromId, way.geometry[segStart]);
+          const toNode = getNode(toId, way.geometry[i]);
+          const road = { speed, level: 'low', geom };      // shared by both directions
+          roads.push(road);
+          fromNode.edges.push({ id: edgeId++, to: toId, dist, geom, road });
+          toNode.edges.push({ id: edgeId++, to: fromId, dist, geom: geom.slice().reverse(), road });
+        }
+        segStart = i;
+        geom = [p];
+        dist = 0;
+      }
+    }
+  }
+
+  // Step 3: keep only the biggest connected piece of the map
+  const seen = new Set();
+  let best = [];
+  for (const id of g.keys()) {
+    if (seen.has(id)) continue;
+    const comp = [], stack = [id];
+    seen.add(id);
+    while (stack.length) {
+      const u = stack.pop();
+      comp.push(u);
+      for (const e of g.get(u).edges) {
+        if (!seen.has(e.to)) { seen.add(e.to); stack.push(e.to); }
+      }
+    }
+    if (comp.length > best.length) best = comp;
+  }
+  const keep = new Set(best);
+  graph = new Map();
+  for (const id of best) graph.set(id, g.get(id));
+  roads = roads.filter(r => true); // all roads kept for overlay (cheap to draw)
+}
+
+// Find the graph node closest to a coordinate
+function nearestNode(pt) {
+  let bestId = null, bestD = Infinity;
+  const cos = Math.cos(pt.lat * Math.PI / 180);
+  for (const [id, n] of graph) {
+    const dy = n.lat - pt.lat, dx = (n.lon - pt.lon) * cos;
+    const d = dx * dx + dy * dy;
+    if (d < bestD) { bestD = d; bestId = id; }
+  }
+  return bestId;
+}
+
+/* =====================================================
+   6. SIMULATED TRAFFIC
+   ===================================================== */
+function assignTraffic() {
+  const [a, b] = SCENARIOS[$('scenario').value];
+  const rnd = mulberry32(trafficSeed * 9973 + 17);
+  for (const road of roads) {
+    const r = rnd();
+    road.level = r < a ? 'low' : (r < b ? 'moderate' : 'heavy');
+  }
+}
+
+// Weight functions used by Dijkstra
+const distanceWeight = e => e.dist;                                                  // km
+const timeWeight = e => e.dist / (e.road.speed * TRAFFIC[e.road.level].speedFactor); // hours
+
+/* =====================================================
+   7. DIJKSTRA'S ALGORITHM (with a min-heap / priority queue)
+   ===================================================== */
+class MinHeap {
+  constructor() { this.a = []; }
+  get size() { return this.a.length; }
+  push(item) {                      // item = [priority, nodeId]
+    const a = this.a;
+    a.push(item);
+    let i = a.length - 1;
+    while (i > 0) {
+      const p = (i - 1) >> 1;
+      if (a[p][0] <= a[i][0]) break;
+      [a[p], a[i]] = [a[i], a[p]];
+      i = p;
+    }
+  }
+  pop() {
+    const a = this.a, top = a[0], last = a.pop();
+    if (a.length) {
+      a[0] = last;
+      let i = 0;
+      while (true) {
+        let l = 2 * i + 1, r = l + 1, m = i;
+        if (l < a.length && a[l][0] < a[m][0]) m = l;
+        if (r < a.length && a[r][0] < a[m][0]) m = r;
+        if (m === i) break;
+        [a[m], a[i]] = [a[i], a[m]];
+        i = m;
+      }
+    }
+    return top;
+  }
+}
+
+// Returns the list of edges on the best path, or null if there is no path
+function dijkstra(startId, endId, weightFn) {
+  const dist = new Map([[startId, 0]]);
+  const prev = new Map();                // nodeId -> { from: nodeId, edge }
+  const heap = new MinHeap();
+  heap.push([0, startId]);
+
+  while (heap.size) {
+    const [d, u] = heap.pop();
+    if (d > dist.get(u)) continue;       // outdated entry, skip
+    if (u === endId) break;              // reached destination
+    for (const e of graph.get(u).edges) {
+      const nd = d + weightFn(e);
+      if (nd < (dist.has(e.to) ? dist.get(e.to) : Infinity)) {
+        dist.set(e.to, nd);
+        prev.set(e.to, { from: u, edge: e });
+        heap.push([nd, e.to]);
+      }
+    }
+  }
+
+  if (!prev.has(endId)) return null;
+  const path = [];
+  for (let cur = endId; cur !== startId; cur = prev.get(cur).from) path.push(prev.get(cur).edge);
+  return path.reverse();
+}
+
+/* =====================================================
+   8. ROUTE STATISTICS
+   ===================================================== */
+function summarize(edges) {
+  let km = 0, hours = 0, freeHours = 0;
+  const byLevel = { low: 0, moderate: 0, heavy: 0 };
+  for (const e of edges) {
+    km += e.dist;
+    hours += timeWeight(e);
+    freeHours += e.dist / e.road.speed;
+    byLevel[e.road.level] += e.dist;
+  }
+  const pct = {
+    low: km ? byLevel.low / km * 100 : 0,
+    moderate: km ? byLevel.moderate / km * 100 : 0,
+    heavy: km ? byLevel.heavy / km * 100 : 0
+  };
+  let overall = 'low';
+  if (pct.heavy > 35) overall = 'heavy';
+  else if (pct.heavy + pct.moderate > 45) overall = 'moderate';
+  return { km, hours, freeHours, pct, overall };
+}
+
+/* =====================================================
+   9. DRAWING ON THE MAP
+   ===================================================== */
+function drawRoute(edges, casingColor, casingWeight, coreWeight) {
+  const all = [];
+  edges.forEach(e => all.push(...e.geom));
+  const casing = L.polyline(all, { color: casingColor, weight: casingWeight, opacity: 0.85 }).addTo(routeLayer);
+  const cores = edges.map(e =>
+    L.polyline(e.geom, { color: TRAFFIC[e.road.level].color, weight: coreWeight, opacity: 1 }).addTo(routeLayer));
+  return { casing, cores };
+}
+
+function redrawAll() {
+  trafficLayer.clearLayers();
+  routeLayer.clearLayers();
+  if (!graph) return;
+
+  // Optional overlay of simulated traffic on every road
+  if ($('showAll').checked) {
+    for (const road of roads) {
+      L.polyline(road.geom, { color: TRAFFIC[road.level].color, weight: 2, opacity: 0.55 }).addTo(trafficLayer);
+    }
+  }
+
+  if (!current) return;
+  drawRoute(current.shortest, SHORT_COLOR, 12, 4);   // wide outline = shortest
+  drawRoute(current.fastest, FAST_COLOR, 7, 3);      // narrower outline on top = fastest
+
+  L.circleMarker([startPoint.lat, startPoint.lon], { radius: 9, color: '#fff', weight: 3, fillColor: '#16a34a', fillOpacity: 1 })
+    .bindTooltip('Start', { permanent: true, direction: 'top' }).addTo(routeLayer);
+  L.circleMarker([endPoint.lat, endPoint.lon], { radius: 9, color: '#fff', weight: 3, fillColor: '#dc2626', fillOpacity: 1 })
+    .bindTooltip('Destination', { permanent: true, direction: 'top' }).addTo(routeLayer);
+}
+
+/* =====================================================
+   10. COMPUTE BOTH ROUTES AND SHOW RESULTS
+   ===================================================== */
+function computeAndShow(fitMap) {
+  const shortest = dijkstra(startNode, endNode, distanceWeight);
+  const fastest  = dijkstra(startNode, endNode, timeWeight);
+  if (!shortest || !fastest) throw new Error('No connected route found between these two places.');
+  current = { shortest, fastest };
+
+  redrawAll();
+  if (fitMap) {
+    const pts = [];
+    shortest.forEach(e => pts.push(...e.geom));
+    fastest.forEach(e => pts.push(...e.geom));
+    map.fitBounds(L.latLngBounds(pts), { padding: [40, 40] });
+  }
+
+  const s = summarize(shortest), f = summarize(fastest);
+  const same = shortest.map(e => e.id).join() === fastest.map(e => e.id).join();
+
+  const card = (cls, title, st) => `
+    <div class="card ${cls}">
+      <h3>${title}</h3>
+      <table>
+        <tr><td>Distance</td><td>${fmtDist(st.km)}</td></tr>
+        <tr><td>Est. travel time (with traffic)</td><td>${fmtTime(st.hours)}</td></tr>
+        <tr><td>Time with no traffic</td><td>${fmtTime(st.freeHours)}</td></tr>
+        <tr><td>Overall traffic</td>
+            <td><span class="badge" style="background:${TRAFFIC[st.overall].color}">${TRAFFIC[st.overall].label}</span></td></tr>
+      </table>
+      <div class="bar">
+        <div style="width:${st.pct.low}%;background:${TRAFFIC.low.color}"></div>
+        <div style="width:${st.pct.moderate}%;background:${TRAFFIC.moderate.color}"></div>
+        <div style="width:${st.pct.heavy}%;background:${TRAFFIC.heavy.color}"></div>
+      </div>
+      <div class="small">Low ${st.pct.low.toFixed(0)}% | Moderate ${st.pct.moderate.toFixed(0)}% | Heavy ${st.pct.heavy.toFixed(0)}%</div>
+    </div>`;
+
+  let summary;
+  if (same) {
+    summary = 'Both algorithms chose the <b>same route</b>. With this traffic pattern, the shortest road is also the fastest.';
+  } else {
+    const savedMin = (s.hours - f.hours) * 60;
+    const extraKm = f.km - s.km;
+    summary = `The <b>fastest</b> route is <b>${Math.abs(savedMin).toFixed(1)} min ${savedMin >= 0 ? 'quicker' : 'slower'}</b>` +
+              ` and <b>${Math.abs(extraKm).toFixed(2)} km ${extraKm >= 0 ? 'longer' : 'shorter'}</b> than the shortest route.` +
+              ' It avoids heavily congested roads where possible.';
+  }
+
+  $('results').innerHTML =
+    card('shortest', 'Shortest route (by distance)', s) +
+    card('fastest', 'Fastest route (by simulated time)', f) +
+    `<div class="compare">${summary}</div>`;
+}
+
+/* =====================================================
+   11. RECENT SEARCH HISTORY (localStorage)
+   ===================================================== */
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; }
+  catch (e) { return []; }
+}
+function saveHistory(from, to, scenario) {
+  try {
+    let list = loadHistory().filter(h => !(h.from === from && h.to === to && h.scenario === scenario));
+    list.unshift({ from, to, scenario });
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(list.slice(0, 8)));
+  } catch (e) { /* storage may be blocked; ignore */ }
+  renderHistory();
+}
+function renderHistory() {
+  const box = $('history');
+  box.innerHTML = '';
+  const list = loadHistory();
+  if (!list.length) {
+    box.innerHTML = '<div style="cursor:default;color:#888;">No searches yet</div>';
+    return;
+  }
+  list.forEach(h => {
+    const div = document.createElement('div');
+    div.textContent = h.from + '  →  ' + h.to + '  (' + h.scenario + ')';
+    div.title = 'Click to search again';
+    div.onclick = () => {
+      $('from').value = h.from;
+      $('to').value = h.to;
+      $('scenario').value = h.scenario;
+      findRoutes();
+    };
+    box.appendChild(div);
+  });
+}
+$('clearBtn').onclick = () => {
+  try { localStorage.removeItem(HISTORY_KEY); } catch (e) {}
+  renderHistory();
+};
+
+/* =====================================================
+   12. MAIN FLOW (button handlers)
+   ===================================================== */
+function setBusy(busy) {
+  $('goBtn').disabled = busy;
+  $('reBtn').disabled = busy || !graph;
+}
+
+async function findRoutes() {
+  const fromText = $('from').value.trim();
+  const toText = $('to').value.trim();
+  if (!fromText || !toText) { setStatus('Please enter both a start and a destination.', true); return; }
+
+  try {
+    setBusy(true);
+    $('results').innerHTML = '';
+    current = null;
+    trafficSeed = 1;
+
+    setStatus('1/4  Finding locations...');
+    startPoint = await geocode(fromText);
+    await new Promise(r => setTimeout(r, 1100));      // be polite to the free geocoder
+    endPoint = await geocode(toText);
+
+    const km = haversine([startPoint.lat, startPoint.lon], [endPoint.lat, endPoint.lon]);
+    if (km > MAX_DISTANCE_KM) throw new Error(`Places are ${km.toFixed(1)} km apart. Please keep them within ${MAX_DISTANCE_KM} km.`);
+    if (km < 0.05) throw new Error('Start and destination are too close together.');
+
+    setStatus('2/4  Downloading road network from OpenStreetMap (may take 5-20 seconds)...');
+    await pause();
+    const elements = await fetchRoads(startPoint, endPoint);
+
+    setStatus('3/4  Building graph (intersections = nodes, roads = edges)...');
+    await pause();
+    buildGraph(elements);
+    if (!graph.size) throw new Error('Could not build a road graph for this area.');
+
+    startNode = nearestNode(startPoint);
+    endNode = nearestNode(endPoint);
+    if (startNode === endNode) throw new Error('Both places snap to the same intersection. Pick places farther apart.');
+
+    setStatus('4/4  Simulating traffic and running Dijkstra...');
+    await pause();
+    assignTraffic();
+    computeAndShow(true);
+
+    setStatus(`Done. Graph has ${graph.size} intersections and ${roads.length} road segments.`);
+    saveHistory(fromText, toText, $('scenario').value);
+  } catch (err) {
+    setStatus('Error: ' + err.message, true);
+  } finally {
+    setBusy(false);
+  }
+}
+
+// New random traffic on the SAME graph, then run Dijkstra again
+function resimulate() {
+  if (!graph || startNode === null) return;
+  try {
+    trafficSeed++;
+    assignTraffic();
+    computeAndShow(false);
+    setStatus('Traffic re-simulated (pattern #' + trafficSeed + ').');
+  } catch (err) {
+    setStatus('Error: ' + err.message, true);
+  }
+}
+
+$('goBtn').onclick = findRoutes;
+$('reBtn').onclick = resimulate;
+$('scenario').onchange = () => { if (graph) resimulate(); };
+$('showAll').onchange = redrawAll;
+['from', 'to'].forEach(id => $(id).addEventListener('keydown', e => { if (e.key === 'Enter') findRoutes(); }));
+
+renderHistory();
+</script>
+</body>
+</html>
